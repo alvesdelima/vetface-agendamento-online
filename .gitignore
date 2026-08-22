@@ -1,0 +1,11 @@
+# Arquivos de sistema e editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Configurações e Webhooks sensíveis
+config.js
+
+# Logs
+*.log

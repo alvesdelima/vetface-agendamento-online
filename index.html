@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agendamento de Consulta | VET.FACE Odontologia Veterinária</title>
+    <!-- Fonte moderna e limpa -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="page-wrapper">
+      <!-- Card Principal -->
+      <main class="booking-card">
+        <!-- Topo com a Logo e Identidade VET.FACE -->
+        <header class="card-header">
+          <img
+            src="logo-com-icone-e-slogan-branco.svg"
+            alt="VET.FACE Odontologia Veterinária"
+            class="vet-logo"
+            onerror="this.style.display = 'none'"
+          />
+          <h1>Agendar Avaliação Odontológica</h1>
+          <p>Cuide do sorriso e da saúde do seu pet.</p>
+        </header>
+
+        <div class="card-body">
+          <!-- Estado de Carregamento -->
+          <div id="loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>Buscando dias e horários livres na agenda...</p>
+          </div>
+
+          <div id="bookingContent" class="hidden">
+            <!-- Passo 1: Seleção de Dias -->
+            <section class="step-section">
+              <div class="step-title">
+                <span class="step-badge">1</span>
+                <span>Escolha o Dia Disponível</span>
+              </div>
+              <div id="diasContainer" class="dias-scroll-container"></div>
+            </section>
+
+            <!-- Passo 2: Horários do Dia -->
+            <section id="horariosWrapper" class="step-section hidden">
+              <div class="step-title">
+                <span class="step-badge">2</span>
+                <span>Selecione o Horário</span>
+              </div>
+              <div id="slotsContainer" class="slots-grid"></div>
+            </section>
+
+            <!-- Passo 3: Dados do Tutor e do Pet -->
+            <form id="bookingForm" class="hidden">
+              <div class="step-title">
+                <span class="step-badge">3</span>
+                <span>Dados do Tutor & Pet</span>
+              </div>
+
+              <div class="form-grid">
+                <div class="input-group">
+                  <label for="nome">Seu Nome Completo *</label>
+                  <input
+                    type="text"
+                    id="nome"
+                    required
+                    placeholder="Ex: Camila Silva"
+                  />
+                </div>
+
+                <div class="input-group">
+                  <label for="telefone">WhatsApp para Confirmação *</label>
+                  <input
+                    type="tel"
+                    id="telefone"
+                    required
+                    placeholder="(81) 90000-0000"
+                  />
+                </div>
+
+                <div class="input-group">
+                  <label for="email">E-mail *</label>
+                  <input
+                    type="email"
+                    id="email"
+                    required
+                    placeholder="seu@email.com"
+                  />
+                </div>
+
+                <div class="input-row-2">
+                  <div class="input-group">
+                    <label for="nomePet">Nome do Pet *</label>
+                    <input
+                      type="text"
+                      id="nomePet"
+                      required
+                      placeholder="Ex: Thor"
+                    />
+                  </div>
+                  <div class="input-group">
+                    <label for="tipoPet">Espécie *</label>
+                    <select id="tipoPet" required>
+                      <option value="Cão">🐶 Cão</option>
+                      <option value="Gato">🐱 Gato</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" id="btnSubmit" class="btn-primary">
+                <span>Confirmar Agendamento</span>
+              </button>
+              <p class="terms-note">🔒 Seus dados estão seguros.</p>
+            </form>
+          </div>
+
+          <div id="statusMessage" class="status-box" aria-live="polite"></div>
+        </div>
+      </main>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
