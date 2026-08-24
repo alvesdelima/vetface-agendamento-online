@@ -3,8 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agendamento de Consulta | VET.FACE Odontologia Veterinária</title>
-    <!-- Fonte moderna e limpa -->
+    <title>Agendamento | VET.FACE Odontologia Veterinária</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -15,9 +14,8 @@
   </head>
   <body>
     <div class="page-wrapper">
-      <!-- Card Principal -->
       <main class="booking-card">
-        <!-- Topo com a Logo e Identidade VET.FACE -->
+        <!-- Topo VET.FACE -->
         <header class="card-header">
           <img
             src="logo-com-icone-e-slogan-branco.svg"
@@ -25,103 +23,208 @@
             class="vet-logo"
             onerror="this.style.display = 'none'"
           />
-          <h1>Agendar Avaliação Odontológica</h1>
-          <p>Cuide do sorriso e da saúde do seu pet.</p>
+          <h1 id="headerTitle">Agendamento de Consultas</h1>
+          <p id="headerSubtitle">
+            Cuide do sorriso e da saúde do seu pet com a Dra. Mariana Ramos
+          </p>
         </header>
 
         <div class="card-body">
-          <!-- Estado de Carregamento -->
-          <div id="loading" class="loading-state">
-            <div class="spinner"></div>
-            <p>Buscando dias e horários livres na agenda...</p>
+          <!-- TELA 0: Escolha da Ação Inicial -->
+          <div id="screenInitial" class="action-menu">
+            <button
+              type="button"
+              id="btnGoNovo"
+              class="btn-action-card primary"
+            >
+              <span class="action-icon">🗓️</span>
+              <div class="action-texts">
+                <strong>Novo Agendamento</strong>
+                <small>Marcar uma nova avaliação para seu pet</small>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              id="btnGoReagendar"
+              class="btn-action-card secondary"
+            >
+              <span class="action-icon">🔄</span>
+              <div class="action-texts">
+                <strong>Reagendar Consulta</strong>
+                <small
+                  >Alterar a data ou horário de uma consulta já marcada</small
+                >
+              </div>
+            </button>
           </div>
 
-          <div id="bookingContent" class="hidden">
-            <!-- Passo 1: Seleção de Dias -->
-            <section class="step-section">
-              <div class="step-title">
-                <span class="step-badge">1</span>
-                <span>Escolha o Dia Disponível</span>
-              </div>
-              <div id="diasContainer" class="dias-scroll-container"></div>
-            </section>
+          <!-- TELA 1: Busca por Telefone para Reagendamento -->
+          <div id="screenBuscarReagendamento" class="hidden">
+            <button type="button" class="btn-back" id="btnVoltarBusca">
+              ← Voltar ao Início
+            </button>
 
-            <!-- Passo 2: Horários do Dia -->
-            <section id="horariosWrapper" class="step-section hidden">
-              <div class="step-title">
-                <span class="step-badge">2</span>
-                <span>Selecione o Horário</span>
-              </div>
-              <div id="slotsContainer" class="slots-grid"></div>
-            </section>
+            <div class="step-title" style="margin-top: 15px">
+              <span class="step-badge">1</span>
+              <span>Localizar seu Agendamento</span>
+            </div>
 
-            <!-- Passo 3: Dados do Tutor e do Pet -->
-            <form id="bookingForm" class="hidden">
-              <div class="step-title">
-                <span class="step-badge">3</span>
-                <span>Dados do Tutor & Pet</span>
-              </div>
+            <p class="helper-text">
+              Digite o número de WhatsApp informado na hora do agendamento:
+            </p>
 
-              <div class="form-grid">
-                <div class="input-group">
-                  <label for="nome">Seu Nome Completo *</label>
-                  <input
-                    type="text"
-                    id="nome"
-                    required
-                    placeholder="Ex: Camila Silva"
-                  />
+            <div class="search-box">
+              <input
+                type="tel"
+                id="inputBuscaTelefone"
+                placeholder="(81) 90000-0000"
+                maxlength="15"
+              />
+              <button
+                type="button"
+                id="btnBuscarConsulta"
+                class="btn-primary"
+                style="margin-top: 10px"
+              >
+                Buscar Consulta
+              </button>
+            </div>
+          </div>
+
+          <!-- Resumo da Consulta Atual Encontrada -->
+          <div id="consultaEncontradaCard" class="appointment-summary hidden">
+            <div class="summary-header">Consulta Localizada</div>
+            <div class="summary-details">
+              <p>🐾 <strong>Pet:</strong> <span id="resumoPet">-</span></p>
+              <p>👤 <strong>Tutor:</strong> <span id="resumoTutor">-</span></p>
+              <p>
+                ⏰ <strong>Data & Hora Atual:</strong>
+                <span id="resumoDataHora">-</span>
+              </p>
+            </div>
+            <p class="helper-text" style="margin-top: 10px; margin-bottom: 0">
+              Selecione o novo dia e horário disponível abaixo:
+            </p>
+          </div>
+
+          <!-- TELA 2: Seleção de Calendário (Comum a Novo e Reagendamento) -->
+          <div id="screenAgendamento" class="hidden">
+            <button type="button" id="btnVoltarAgendamento" class="btn-back">
+              ← Voltar
+            </button>
+
+            <div id="loadingSlots" class="loading-state">
+              <div class="spinner"></div>
+              <p>Consultando horários livres na agenda...</p>
+            </div>
+
+            <div id="slotsWrapper" class="hidden">
+              <!-- Passo de Dias -->
+              <section class="step-section" style="margin-top: 15px">
+                <div class="step-title">
+                  <span class="step-badge" id="badgeStepDia">1</span>
+                  <span id="labelStepDia">Escolha o Dia Disponível</span>
+                </div>
+                <div id="diasContainer" class="dias-scroll-container"></div>
+              </section>
+
+              <!-- Passo de Horários -->
+              <section id="horariosWrapper" class="step-section hidden">
+                <div class="step-title">
+                  <span class="step-badge" id="badgeStepHora">2</span>
+                  <span id="labelStepHora">Selecione o Horário</span>
+                </div>
+                <div id="slotsContainer" class="slots-grid"></div>
+              </section>
+
+              <!-- Formulário Tutor/Pet (Apenas para Novo Agendamento) -->
+              <form id="bookingForm" class="hidden">
+                <div class="step-title">
+                  <span class="step-badge">3</span>
+                  <span>Dados do Tutor & Pet</span>
                 </div>
 
-                <div class="input-group">
-                  <label for="telefone">WhatsApp para Confirmação *</label>
-                  <input
-                    type="tel"
-                    id="telefone"
-                    required
-                    placeholder="(81) 90000-0000"
-                  />
-                </div>
-
-                <div class="input-group">
-                  <label for="email">E-mail *</label>
-                  <input
-                    type="email"
-                    id="email"
-                    required
-                    placeholder="seu@email.com"
-                  />
-                </div>
-
-                <div class="input-row-2">
+                <div class="form-grid">
                   <div class="input-group">
-                    <label for="nomePet">Nome do Pet *</label>
+                    <label for="nome">Seu Nome Completo *</label>
                     <input
                       type="text"
-                      id="nomePet"
+                      id="nome"
                       required
-                      placeholder="Ex: Thor"
+                      placeholder="Ex: Camila Silva"
                     />
                   </div>
+
                   <div class="input-group">
-                    <label for="tipoPet">Espécie *</label>
-                    <select id="tipoPet" required>
-                      <option value="Cão">🐶 Cão</option>
-                      <option value="Gato">🐱 Gato</option>
-                      <option value="Outro">Outro</option>
-                    </select>
+                    <label for="telefone">WhatsApp para Confirmação *</label>
+                    <input
+                      type="tel"
+                      id="telefone"
+                      required
+                      placeholder="(81) 90000-0000"
+                      maxlength="15"
+                    />
+                  </div>
+
+                  <div class="input-group">
+                    <label for="email">E-mail *</label>
+                    <input
+                      type="email"
+                      id="email"
+                      required
+                      placeholder="seu@email.com"
+                    />
+                  </div>
+
+                  <div class="input-row-2">
+                    <div class="input-group">
+                      <label for="nomePet">Nome do Pet *</label>
+                      <input
+                        type="text"
+                        id="nomePet"
+                        required
+                        placeholder="Ex: Thor"
+                      />
+                    </div>
+                    <div class="input-group">
+                      <label for="tipoPet">Espécie *</label>
+                      <select id="tipoPet" required>
+                        <option value="Cão">🐶 Cão</option>
+                        <option value="Gato">🐱 Gato</option>
+                        <option value="Outro">Outro</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <button type="submit" id="btnSubmit" class="btn-primary">
-                <span>Confirmar Agendamento</span>
-              </button>
-              <p class="terms-note">🔒 Seus dados estão seguros.</p>
-            </form>
+                <button type="submit" id="btnSubmitNovo" class="btn-primary">
+                  <span>Confirmar Agendamento</span>
+                </button>
+              </form>
+
+              <!-- Botão Exclusivo de Ação para Reagendamento -->
+              <div
+                id="reagendarActionBox"
+                class="hidden"
+                style="margin-top: 20px"
+              >
+                <button
+                  type="button"
+                  id="btnConfirmarReagendamento"
+                  class="btn-primary"
+                >
+                  <span>Salvar Novo Horário</span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div id="statusMessage" class="status-box" aria-live="polite"></div>
+          <div
+            id="statusMessage"
+            class="status-box hidden"
+            aria-live="polite"
+          ></div>
         </div>
       </main>
     </div>

@@ -1,29 +1,178 @@
-// Substitua pelas URLs de Webhook Production do seu n8n
+// URLs consumidas a partir do config.js
 const N8N_URL_SLOTS = CONFIG.N8N_URL_SLOTS;
 const N8N_URL_AGENDAR = CONFIG.N8N_URL_AGENDAR;
 const N8N_URL_CONSULTAR = CONFIG.N8N_URL_CONSULTAR;
 const N8N_URL_REAGENDAR = CONFIG.N8N_URL_REAGENDAR;
 
+// Estados Globais
+let modoOperacao = "novo"; // 'novo' | 'reagendar'
+let eventoParaReagendar = null;
 let agendaDisponivel = {};
 let dataSelecionada = null;
 let horarioSelecionado = null;
 
-const loading = document.getElementById("loading");
-const bookingContent = document.getElementById("bookingContent");
+// Elementos da Interface
+const screenInitial = document.getElementById("screenInitial");
+const screenBuscarReagendamento = document.getElementById(
+  "screenBuscarReagendamento",
+);
+const screenAgendamento = document.getElementById("screenAgendamento");
+const consultaEncontradaCard = document.getElementById(
+  "consultaEncontradaCard",
+);
+const loadingSlots = document.getElementById("loadingSlots");
+const slotsWrapper = document.getElementById("slotsWrapper");
 const diasContainer = document.getElementById("diasContainer");
 const horariosWrapper = document.getElementById("horariosWrapper");
 const slotsContainer = document.getElementById("slotsContainer");
 const bookingForm = document.getElementById("bookingForm");
+const reagendarActionBox = document.getElementById("reagendarActionBox");
 const statusMessage = document.getElementById("statusMessage");
-const btnSubmit = document.getElementById("btnSubmit");
 
-// 1. Inicializa buscando os dias e horários livres
-window.addEventListener("DOMContentLoaded", async () => {
+// Eventos de Navegação
+document
+  .getElementById("btnGoNovo")
+  .addEventListener("click", iniciarNovoAgendamento);
+document
+  .getElementById("btnGoReagendar")
+  .addEventListener("click", iniciarReagendamento);
+document
+  .getElementById("btnVoltarBusca")
+  .addEventListener("click", resetarParaInicio);
+document
+  .getElementById("btnVoltarAgendamento")
+  .addEventListener("click", resetarParaInicio);
+document
+  .getElementById("btnBuscarConsulta")
+  .addEventListener("click", buscarConsultaPorTelefone);
+document
+  .getElementById("btnConfirmarReagendamento")
+  .addEventListener("click", executarReagendamento);
+
+// Máscara automática de telefone/WhatsApp
+document.querySelectorAll('input[type="tel"]').forEach((input) => {
+  input.addEventListener("input", (e) => {
+    let v = e.target.value.replace(/\D/g, "");
+    if (v.length > 11) v = v.slice(0, 11);
+    if (v.length > 10) {
+      e.target.value = `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7)}`;
+    } else if (v.length > 5) {
+      e.target.value = `(${v.slice(0, 2)}) ${v.slice(2, 6)}-${v.slice(6)}`;
+    } else if (v.length > 2) {
+      e.target.value = `(${v.slice(0, 2)}) ${v.slice(2)}`;
+    } else {
+      e.target.value = v;
+    }
+  });
+});
+
+function resetarParaInicio() {
+  screenInitial.classList.remove("hidden");
+  screenBuscarReagendamento.classList.add("hidden");
+  screenAgendamento.classList.add("hidden");
+  consultaEncontradaCard.classList.add("hidden");
+  statusMessage.className = "status-box hidden";
+  statusMessage.innerText = "";
+  document.getElementById("headerTitle").innerText = "Agendamento de Consultas";
+  document.getElementById("headerSubtitle").innerText =
+    "Cuide do sorriso e da saúde do seu pet com a Dra. Mariana Ramos";
+}
+
+// 1. INICIAR NOVO AGENDAMENTO
+function iniciarNovoAgendamento() {
+  modoOperacao = "novo";
+  screenInitial.classList.add("hidden");
+  screenAgendamento.classList.remove("hidden");
+  document.getElementById("headerTitle").innerText =
+    "Agendar Avaliação Odontológica";
+  document.getElementById("labelStepDia").innerText =
+    "Escolha o Dia Disponível";
+  carregarSlots();
+}
+
+// 2. INICIAR REAGENDAMENTO
+function iniciarReagendamento() {
+  modoOperacao = "reagendar";
+  screenInitial.classList.add("hidden");
+  screenBuscarReagendamento.classList.remove("hidden");
+  document.getElementById("headerTitle").innerText = "Reagendar Consulta";
+}
+
+// 3. CONSULTAR AGENDAMENTO POR TELEFONE
+async function buscarConsultaPorTelefone() {
+  const telLimpo = document
+    .getElementById("inputBuscaTelefone")
+    .value.replace(/\D/g, "");
+  if (telLimpo.length < 10) {
+    alert("Por favor, informe o DDD e o número completo do WhatsApp.");
+    return;
+  }
+
+  const btn = document.getElementById("btnBuscarConsulta");
+  btn.disabled = true;
+  btn.innerText = "Consultando agenda...";
+  statusMessage.className = "status-box hidden";
+
+  try {
+    const res = await fetch(
+      `${N8N_URL_CONSULTAR}?telefone=${encodeURIComponent(telLimpo)}`,
+    );
+    const data = await res.json();
+
+    const payload = Array.isArray(data) ? data[0] : data;
+
+    if (!payload || payload.encontrado === false || !payload.evento) {
+      statusMessage.className = "status-box error";
+      statusMessage.innerText =
+        "Nenhuma consulta futura foi localizada com este número.";
+      return;
+    }
+
+    eventoParaReagendar = {
+      supabaseId: payload.evento.id,
+      googleEventId: payload.evento.google_event_id,
+      nomePet: payload.evento.nomePet,
+      nomeTutor: payload.evento.nomeTutor,
+      startTime: payload.evento.start_time,
+    };
+
+    document.getElementById("resumoPet").innerText =
+      eventoParaReagendar.nomePet || "Pet";
+    document.getElementById("resumoTutor").innerText =
+      eventoParaReagendar.nomeTutor || "Tutor";
+    document.getElementById("resumoDataHora").innerText = formatarDataHora(
+      eventoParaReagendar.startTime,
+    );
+
+    screenBuscarReagendamento.classList.add("hidden");
+    consultaEncontradaCard.classList.remove("hidden");
+    screenAgendamento.classList.remove("hidden");
+    document.getElementById("labelStepDia").innerText = "Escolha a Nova Data";
+
+    carregarSlots();
+  } catch (err) {
+    statusMessage.className = "status-box error";
+    statusMessage.innerText =
+      "Falha ao buscar agendamento. Verifique sua conexão e tente novamente.";
+    console.error("Erro na busca:", err);
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "Buscar Consulta";
+  }
+}
+
+// 4. CARREGAR SLOTS DE HORÁRIOS LIVRES
+async function carregarSlots() {
+  loadingSlots.classList.remove("hidden");
+  slotsWrapper.classList.add("hidden");
+  horariosWrapper.classList.add("hidden");
+  bookingForm.classList.add("hidden");
+  reagendarActionBox.classList.add("hidden");
+
   try {
     const res = await fetch(N8N_URL_SLOTS);
     const data = await res.json();
 
-    // Normaliza caso o n8n envie envelopado
     if (Array.isArray(data) && data[0]?.agenda) {
       agendaDisponivel = data[0].agenda;
     } else if (data.agenda) {
@@ -32,24 +181,21 @@ window.addEventListener("DOMContentLoaded", async () => {
       agendaDisponivel = data;
     }
 
-    // Filtra apenas chaves com formato YYYY-MM-DD
     const dias = Object.keys(agendaDisponivel).filter((d) =>
       /^\d{4}-\d{2}-\d{2}$/.test(d),
     );
-
-    loading.classList.add("hidden");
+    loadingSlots.classList.add("hidden");
 
     if (dias.length === 0) {
       statusMessage.className = "status-box error";
       statusMessage.innerText =
-        "Não encontramos horários disponíveis nos próximos dias.";
+        "Não há horários disponíveis nos próximos dias.";
       return;
     }
 
-    bookingContent.classList.remove("hidden");
+    slotsWrapper.classList.remove("hidden");
     diasContainer.innerHTML = "";
 
-    // Renderiza cada dia livre
     dias.forEach((diaISO) => {
       const [ano, mes, dia] = diaISO.split("-");
       const dataObj = new Date(Number(ano), Number(mes) - 1, Number(dia));
@@ -74,17 +220,17 @@ window.addEventListener("DOMContentLoaded", async () => {
       diasContainer.appendChild(btn);
     });
   } catch (err) {
-    loading.innerHTML =
-      '<p style="color:#ef4444;">Erro ao carregar a agenda da VET.FACE. Recarregue a página.</p>';
-    console.error(err);
+    loadingSlots.innerHTML =
+      '<p style="color:#ef4444;">Erro ao consultar a agenda. Recarregue a página.</p>';
   }
-});
+}
 
-// 2. Renderiza os horários livres ao clicar em um dia
+// 5. RENDERIZAR HORÁRIOS LIVRES DO DIA SELECIONADO
 function renderHorarios(diaISO) {
   horarioSelecionado = null;
-  bookingForm.classList.add("hidden");
   horariosWrapper.classList.remove("hidden");
+  bookingForm.classList.add("hidden");
+  reagendarActionBox.classList.add("hidden");
   slotsContainer.innerHTML = "";
 
   const horarios = agendaDisponivel[diaISO] || [];
@@ -101,21 +247,26 @@ function renderHorarios(diaISO) {
         .forEach((b) => b.classList.remove("selected"));
       btn.classList.add("selected");
       horarioSelecionado = hora;
-      bookingForm.classList.remove("hidden");
+
+      if (modoOperacao === "novo") {
+        bookingForm.classList.remove("hidden");
+      } else {
+        reagendarActionBox.classList.remove("hidden");
+      }
     });
 
     slotsContainer.appendChild(btn);
   });
 }
 
-// 3. Envio do formulário para gravar no Google Calendar
+// 6. ENVIAR NOVO AGENDAMENTO
 bookingForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  btnSubmit.disabled = true;
-  btnSubmit.innerHTML = "<span>Confirmando Consulta...</span>";
-  statusMessage.className = "status-box";
-  statusMessage.innerText = "";
+  const btn = document.getElementById("btnSubmitNovo");
+  btn.disabled = true;
+  btn.innerHTML = "<span>Confirmando Consulta...</span>";
+  statusMessage.className = "status-box hidden";
 
   const payload = {
     nome: document.getElementById("nome").value.trim(),
@@ -138,17 +289,68 @@ bookingForm.addEventListener("submit", async (e) => {
     if (!res.ok) throw new Error();
 
     statusMessage.className = "status-box success";
-    statusMessage.innerText =
-      "✅ Consulta agendada com sucesso! Em breve entraremos em contato para confirmar.";
+    statusMessage.innerText = "✅ Consulta agendada com sucesso!";
+    slotsWrapper.classList.add("hidden");
     bookingForm.reset();
-    horariosWrapper.classList.add("hidden");
-    bookingForm.classList.add("hidden");
   } catch (err) {
     statusMessage.className = "status-box error";
     statusMessage.innerText =
-      "❌ Erro ao confirmar o agendamento. Tente novamente.";
+      "❌ Não foi possível agendar. Tente outro horário.";
   } finally {
-    btnSubmit.disabled = false;
-    btnSubmit.innerHTML = "<span>Confirmar Agendamento</span>";
+    btn.disabled = false;
+    btn.innerHTML = "<span>Confirmar Agendamento</span>";
   }
 });
+
+// 7. EXECUTAR REAGENDAMENTO
+async function executarReagendamento() {
+  if (!dataSelecionada || !horarioSelecionado) {
+    alert("Por favor, selecione a nova data e horário.");
+    return;
+  }
+
+  const btn = document.getElementById("btnConfirmarReagendamento");
+  btn.disabled = true;
+  btn.innerHTML = "<span>Atualizando Horário...</span>";
+  statusMessage.className = "status-box hidden";
+
+  const payload = {
+    eventId: eventoParaReagendar.googleEventId,
+    supabaseId: eventoParaReagendar.supabaseId,
+    nova_start_time: new Date(
+      `${dataSelecionada}T${horarioSelecionado}:00-03:00`,
+    ).toISOString(),
+  };
+
+  try {
+    const res = await fetch(N8N_URL_REAGENDAR, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+
+    statusMessage.className = "status-box success";
+    statusMessage.innerText = "✅ Consulta reagendada com sucesso!";
+    slotsWrapper.classList.add("hidden");
+    consultaEncontradaCard.classList.add("hidden");
+  } catch (err) {
+    statusMessage.className = "status-box error";
+    statusMessage.innerText = "❌ Falha ao reagendar. Tente novamente.";
+    console.error("Erro ao reagendar:", err);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "<span>Salvar Novo Horário</span>";
+  }
+}
+
+function formatarDataHora(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}

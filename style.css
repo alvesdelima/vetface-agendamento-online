@@ -1,8 +1,8 @@
 :root {
-  --primary-dark: #0c4a60; /* Azul Petróleo VET.FACE */
+  --primary-dark: #0c4a60;
   --primary-navy: #083344;
-  --accent-cyan: #00a8cc; /* Ciano de Destaque */
-  --accent-green: #67c97f; /* Verde Menta dos botões do site */
+  --accent-cyan: #00a8cc;
+  --accent-green: #67c97f;
   --accent-green-hover: #56b96e;
   --bg-page: #eef6f8;
   --card-bg: #ffffff;
@@ -58,7 +58,6 @@ body {
   border: 1px solid rgba(12, 74, 96, 0.08);
 }
 
-/* Header com o Azul Petróleo e Gradiente da VET.FACE */
 .card-header {
   background: linear-gradient(135deg, var(--primary-dark) 0%, #106380 100%);
   padding: 28px 24px;
@@ -98,11 +97,111 @@ body {
   line-height: 1.4;
 }
 
-/* Corpo */
 .card-body {
   padding: 26px 24px;
 }
 
+/* Menu de Ação Inicial */
+.action-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 0;
+}
+
+.btn-action-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-light);
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.25s ease;
+}
+
+.btn-action-card .action-icon {
+  font-size: 28px;
+}
+
+.btn-action-card .action-texts strong {
+  display: block;
+  font-size: 16px;
+  color: var(--primary-dark);
+  margin-bottom: 3px;
+}
+
+.btn-action-card .action-texts small {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.btn-action-card.primary:hover {
+  border-color: var(--accent-green);
+  background: #f0fdf4;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(103, 201, 127, 0.15);
+}
+
+.btn-action-card.secondary:hover {
+  border-color: var(--accent-cyan);
+  background: #f0f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 168, 204, 0.15);
+}
+
+/* Botão Voltar */
+.btn-back {
+  background: none;
+  border: none;
+  color: var(--primary-dark);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 0;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.2s;
+}
+
+.btn-back:hover {
+  opacity: 0.7;
+}
+
+.helper-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+/* Resumo do Agendamento Encontrado */
+.appointment-summary {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-left: 5px solid var(--accent-cyan);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin: 16px 0;
+}
+
+.summary-header {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.summary-details p {
+  font-size: 13px;
+  color: var(--text-dark);
+  margin-bottom: 4px;
+}
+
+/* Passos do Calendário */
 .step-section {
   margin-bottom: 22px;
 }
@@ -130,7 +229,7 @@ body {
   font-weight: 800;
 }
 
-/* 1. Dias Disponíveis (Scroll Horizontal Moderno) */
+/* Dias Scroll Horizontal */
 .dias-scroll-container {
   display: flex;
   gap: 10px;
@@ -184,7 +283,7 @@ body {
   color: #ffffff;
 }
 
-/* 2. Horários Livres (Grid em Verde Suave) */
+/* Grade de Horários */
 .slots-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
@@ -215,7 +314,7 @@ body {
   box-shadow: 0 4px 10px rgba(103, 201, 127, 0.35);
 }
 
-/* 3. Formulário */
+/* Formulário e Inputs */
 .form-grid {
   display: flex;
   flex-direction: column;
@@ -238,7 +337,8 @@ body {
 }
 
 .input-group input,
-.input-group select {
+.input-group select,
+.search-box input {
   width: 100%;
   padding: 11px 14px;
   border: 1.5px solid var(--border-light);
@@ -251,15 +351,14 @@ body {
 }
 
 .input-group input:focus,
-.input-group select:focus {
+.input-group select:focus,
+.search-box input:focus {
   border-color: var(--accent-cyan);
   box-shadow: 0 0 0 3px rgba(0, 168, 204, 0.15);
 }
 
-/* Botão Principal com o Verde da VET.FACE */
 .btn-primary {
   width: 100%;
-  margin-top: 18px;
   padding: 15px;
   background: var(--accent-green);
   color: #ffffff;
@@ -284,29 +383,21 @@ body {
   transform: none;
 }
 
-.terms-note {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-align: center;
-  margin-top: 10px;
-}
-
-/* Loader & Estados */
 .loading-state {
   text-align: center;
-  padding: 35px 20px;
+  padding: 25px 20px;
   color: var(--text-muted);
   font-size: 14px;
 }
 
 .spinner {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: 3px solid #e2e8f0;
   border-top-color: var(--accent-cyan);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-  margin: 0 auto 12px;
+  margin: 0 auto 10px;
 }
 
 @keyframes spin {
