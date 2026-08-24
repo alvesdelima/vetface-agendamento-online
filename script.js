@@ -5,7 +5,7 @@ const N8N_URL_CONSULTAR = CONFIG.N8N_URL_CONSULTAR;
 const N8N_URL_REAGENDAR = CONFIG.N8N_URL_REAGENDAR;
 
 // Estados Globais
-let modoOperacao = "novo"; // 'novo' | 'reagendar'
+let modoOperacao = "novo"; // 'novo' | 'consultar' | 'reagendar'
 let eventoParaReagendar = null;
 let agendaDisponivel = {};
 let dataSelecionada = null;
@@ -13,8 +13,9 @@ let horarioSelecionado = null;
 
 // Elementos da Interface
 const screenInitial = document.getElementById("screenInitial");
-const screenBuscarReagendamento = document.getElementById(
-  "screenBuscarReagendamento",
+const screenBuscar = document.getElementById("screenBuscar");
+const screenDetalhesConsulta = document.getElementById(
+  "screenDetalhesConsulta",
 );
 const screenAgendamento = document.getElementById("screenAgendamento");
 const consultaEncontradaCard = document.getElementById(
@@ -34,10 +35,16 @@ document
   .getElementById("btnGoNovo")
   .addEventListener("click", iniciarNovoAgendamento);
 document
+  .getElementById("btnGoConsultar")
+  .addEventListener("click", iniciarModoConsultar);
+document
   .getElementById("btnGoReagendar")
-  .addEventListener("click", iniciarReagendamento);
+  .addEventListener("click", iniciarModoReagendar);
 document
   .getElementById("btnVoltarBusca")
+  .addEventListener("click", resetarParaInicio);
+document
+  .getElementById("btnVoltarDetalhes")
   .addEventListener("click", resetarParaInicio);
 document
   .getElementById("btnVoltarAgendamento")
@@ -46,10 +53,13 @@ document
   .getElementById("btnBuscarConsulta")
   .addEventListener("click", buscarConsultaPorTelefone);
 document
+  .getElementById("btnQueroReagendar")
+  .addEventListener("click", transicionarParaReagendamento);
+document
   .getElementById("btnConfirmarReagendamento")
   .addEventListener("click", executarReagendamento);
 
-// Máscara automática de telefone/WhatsApp
+// Formatação automática do telefone
 document.querySelectorAll('input[type="tel"]').forEach((input) => {
   input.addEventListener("input", (e) => {
     let v = e.target.value.replace(/\D/g, "");
@@ -68,7 +78,8 @@ document.querySelectorAll('input[type="tel"]').forEach((input) => {
 
 function resetarParaInicio() {
   screenInitial.classList.remove("hidden");
-  screenBuscarReagendamento.classList.add("hidden");
+  screenBuscar.classList.add("hidden");
+  screenDetalhesConsulta.classList.add("hidden");
   screenAgendamento.classList.add("hidden");
   consultaEncontradaCard.classList.add("hidden");
   statusMessage.className = "status-box hidden";
@@ -83,22 +94,33 @@ function iniciarNovoAgendamento() {
   modoOperacao = "novo";
   screenInitial.classList.add("hidden");
   screenAgendamento.classList.remove("hidden");
-  document.getElementById("headerTitle").innerText =
-    "Agendar Avaliação Odontológica";
+  document.getElementById("headerTitle").innerText = "Agendar Avaliação";
   document.getElementById("labelStepDia").innerText =
     "Escolha o Dia Disponível";
   carregarSlots();
 }
 
-// 2. INICIAR REAGENDAMENTO
-function iniciarReagendamento() {
-  modoOperacao = "reagendar";
+// 2. INICIAR CONSULTA
+function iniciarModoConsultar() {
+  modoOperacao = "consultar";
   screenInitial.classList.add("hidden");
-  screenBuscarReagendamento.classList.remove("hidden");
-  document.getElementById("headerTitle").innerText = "Reagendar Consulta";
+  screenBuscar.classList.remove("hidden");
+  document.getElementById("headerTitle").innerText = "Consultar Agendamento";
+  document.getElementById("labelBuscaTitulo").innerText =
+    "Localizar Minha Consulta";
 }
 
-// 3. CONSULTAR AGENDAMENTO POR TELEFONE
+// 3. INICIAR REAGENDAMENTO DIRETO
+function iniciarModoReagendar() {
+  modoOperacao = "reagendar";
+  screenInitial.classList.add("hidden");
+  screenBuscar.classList.remove("hidden");
+  document.getElementById("headerTitle").innerText = "Reagendar Consulta";
+  document.getElementById("labelBuscaTitulo").innerText =
+    "Localizar seu Agendamento";
+}
+
+// 4. BUSCA POR TELEFONE
 async function buscarConsultaPorTelefone() {
   const telLimpo = document
     .getElementById("inputBuscaTelefone")
@@ -133,35 +155,59 @@ async function buscarConsultaPorTelefone() {
       googleEventId: payload.evento.google_event_id,
       nomePet: payload.evento.nomePet,
       nomeTutor: payload.evento.nomeTutor,
+      tipoPet: payload.evento.tipoPet,
       startTime: payload.evento.start_time,
     };
 
-    document.getElementById("resumoPet").innerText =
-      eventoParaReagendar.nomePet || "Pet";
-    document.getElementById("resumoTutor").innerText =
-      eventoParaReagendar.nomeTutor || "Tutor";
-    document.getElementById("resumoDataHora").innerText = formatarDataHora(
-      eventoParaReagendar.startTime,
-    );
+    screenBuscar.classList.add("hidden");
 
-    screenBuscarReagendamento.classList.add("hidden");
-    consultaEncontradaCard.classList.remove("hidden");
-    screenAgendamento.classList.remove("hidden");
-    document.getElementById("labelStepDia").innerText = "Escolha a Nova Data";
-
-    carregarSlots();
+    if (modoOperacao === "consultar") {
+      // Exibe a tela de detalhes
+      document.getElementById("viewPet").innerText =
+        `${eventoParaReagendar.nomePet} (${eventoParaReagendar.tipoPet || "Pet"})`;
+      document.getElementById("viewTutor").innerText =
+        eventoParaReagendar.nomeTutor;
+      document.getElementById("viewDataHora").innerText = formatarDataHora(
+        eventoParaReagendar.startTime,
+      );
+      screenDetalhesConsulta.classList.remove("hidden");
+    } else {
+      // Direto para o calendário de reagendamento
+      abrirCalendarioReagendamento();
+    }
   } catch (err) {
     statusMessage.className = "status-box error";
-    statusMessage.innerText =
-      "Falha ao buscar agendamento. Verifique sua conexão e tente novamente.";
-    console.error("Erro na busca:", err);
+    statusMessage.innerText = "Falha ao buscar agendamento. Tente novamente.";
   } finally {
     btn.disabled = false;
     btn.innerText = "Buscar Consulta";
   }
 }
 
-// 4. CARREGAR SLOTS DE HORÁRIOS LIVRES
+// Transição da tela de visualização para o reagendamento
+function transicionarParaReagendamento() {
+  modoOperacao = "reagendar";
+  screenDetalhesConsulta.classList.add("hidden");
+  document.getElementById("headerTitle").innerText = "Reagendar Consulta";
+  abrirCalendarioReagendamento();
+}
+
+function abrirCalendarioReagendamento() {
+  document.getElementById("resumoPet").innerText =
+    eventoParaReagendar.nomePet || "Pet";
+  document.getElementById("resumoTutor").innerText =
+    eventoParaReagendar.nomeTutor || "Tutor";
+  document.getElementById("resumoDataHora").innerText = formatarDataHora(
+    eventoParaReagendar.startTime,
+  );
+
+  consultaEncontradaCard.classList.remove("hidden");
+  screenAgendamento.classList.remove("hidden");
+  document.getElementById("labelStepDia").innerText = "Escolha a Nova Data";
+  carregarSlots();
+}
+
+// 5. CARREGAR SLOTS DE HORÁRIOS LIVRES
 async function carregarSlots() {
   loadingSlots.classList.remove("hidden");
   slotsWrapper.classList.add("hidden");
@@ -225,7 +271,7 @@ async function carregarSlots() {
   }
 }
 
-// 5. RENDERIZAR HORÁRIOS LIVRES DO DIA SELECIONADO
+// 6. RENDERIZAR HORÁRIOS LIVRES
 function renderHorarios(diaISO) {
   horarioSelecionado = null;
   horariosWrapper.classList.remove("hidden");
@@ -259,7 +305,7 @@ function renderHorarios(diaISO) {
   });
 }
 
-// 6. ENVIAR NOVO AGENDAMENTO
+// 7. CONFIRMAR NOVO AGENDAMENTO
 bookingForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -302,7 +348,7 @@ bookingForm.addEventListener("submit", async (e) => {
   }
 });
 
-// 7. EXECUTAR REAGENDAMENTO
+// 8. EXECUTAR REAGENDAMENTO
 async function executarReagendamento() {
   if (!dataSelecionada || !horarioSelecionado) {
     alert("Por favor, selecione a nova data e horário.");
@@ -338,7 +384,6 @@ async function executarReagendamento() {
   } catch (err) {
     statusMessage.className = "status-box error";
     statusMessage.innerText = "❌ Falha ao reagendar. Tente novamente.";
-    console.error("Erro ao reagendar:", err);
   } finally {
     btn.disabled = false;
     btn.innerHTML = "<span>Salvar Novo Horário</span>";

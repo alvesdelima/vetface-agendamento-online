@@ -30,7 +30,7 @@
         </header>
 
         <div class="card-body">
-          <!-- TELA 0: Escolha da Ação Inicial -->
+          <!-- TELA 0: Menu Inicial com 3 Botões -->
           <div id="screenInitial" class="action-menu">
             <button
               type="button"
@@ -41,6 +41,18 @@
               <div class="action-texts">
                 <strong>Novo Agendamento</strong>
                 <small>Marcar uma nova avaliação para seu pet</small>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              id="btnGoConsultar"
+              class="btn-action-card tertiary"
+            >
+              <span class="action-icon">🔍</span>
+              <div class="action-texts">
+                <strong>Consultar Agendamento</strong>
+                <small>Verificar data, hora e status da sua consulta</small>
               </div>
             </button>
 
@@ -59,15 +71,15 @@
             </button>
           </div>
 
-          <!-- TELA 1: Busca por Telefone para Reagendamento -->
-          <div id="screenBuscarReagendamento" class="hidden">
+          <!-- TELA 1: Busca por Telefone (Usada para Consulta ou Reagendamento) -->
+          <div id="screenBuscar" class="hidden">
             <button type="button" class="btn-back" id="btnVoltarBusca">
               ← Voltar ao Início
             </button>
 
             <div class="step-title" style="margin-top: 15px">
               <span class="step-badge">1</span>
-              <span>Localizar seu Agendamento</span>
+              <span id="labelBuscaTitulo">Localizar Consulta</span>
             </div>
 
             <p class="helper-text">
@@ -92,9 +104,49 @@
             </div>
           </div>
 
-          <!-- Resumo da Consulta Atual Encontrada -->
+          <!-- TELA 1.5: Tela de Detalhes da Consulta (Modo Apenas Consulta) -->
+          <div id="screenDetalhesConsulta" class="hidden">
+            <button type="button" class="btn-back" id="btnVoltarDetalhes">
+              ← Voltar ao Início
+            </button>
+
+            <div class="appointment-card-view">
+              <div class="badge-status-confirmed">✅ Consulta Confirmada</div>
+
+              <div class="view-item">
+                <span class="view-label">🐾 Paciente (Pet):</span>
+                <strong id="viewPet" class="view-value">-</strong>
+              </div>
+
+              <div class="view-item">
+                <span class="view-label">👤 Tutor Responsável:</span>
+                <strong id="viewTutor" class="view-value">-</strong>
+              </div>
+
+              <div class="view-item">
+                <span class="view-label">📅 Data e Horário:</span>
+                <strong id="viewDataHora" class="view-value highlight"
+                  >-</strong
+                >
+              </div>
+
+              <div class="card-view-actions">
+                <button
+                  type="button"
+                  id="btnQueroReagendar"
+                  class="btn-secondary"
+                >
+                  🔄 Reagendar esta Consulta
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Resumo fixo quando está em fluxo de REAGENDAMENTO ativo -->
           <div id="consultaEncontradaCard" class="appointment-summary hidden">
-            <div class="summary-header">Consulta Localizada</div>
+            <div class="summary-header">
+              Consulta Selecionada para Alteração
+            </div>
             <div class="summary-details">
               <p>🐾 <strong>Pet:</strong> <span id="resumoPet">-</span></p>
               <p>👤 <strong>Tutor:</strong> <span id="resumoTutor">-</span></p>
@@ -108,7 +160,7 @@
             </p>
           </div>
 
-          <!-- TELA 2: Seleção de Calendário (Comum a Novo e Reagendamento) -->
+          <!-- TELA 2: Calendário e Horários (Novo Agendamento ou Reagendamento) -->
           <div id="screenAgendamento" class="hidden">
             <button type="button" id="btnVoltarAgendamento" class="btn-back">
               ← Voltar
@@ -120,7 +172,7 @@
             </div>
 
             <div id="slotsWrapper" class="hidden">
-              <!-- Passo de Dias -->
+              <!-- Passo 1: Dias -->
               <section class="step-section" style="margin-top: 15px">
                 <div class="step-title">
                   <span class="step-badge" id="badgeStepDia">1</span>
@@ -129,7 +181,7 @@
                 <div id="diasContainer" class="dias-scroll-container"></div>
               </section>
 
-              <!-- Passo de Horários -->
+              <!-- Passo 2: Horários -->
               <section id="horariosWrapper" class="step-section hidden">
                 <div class="step-title">
                   <span class="step-badge" id="badgeStepHora">2</span>
@@ -138,7 +190,7 @@
                 <div id="slotsContainer" class="slots-grid"></div>
               </section>
 
-              <!-- Formulário Tutor/Pet (Apenas para Novo Agendamento) -->
+              <!-- Passo 3: Formulário (Apenas Novo Agendamento) -->
               <form id="bookingForm" class="hidden">
                 <div class="step-title">
                   <span class="step-badge">3</span>
@@ -203,7 +255,7 @@
                 </button>
               </form>
 
-              <!-- Botão Exclusivo de Ação para Reagendamento -->
+              <!-- Ação de Reagendamento -->
               <div
                 id="reagendarActionBox"
                 class="hidden"
