@@ -1,5 +1,5 @@
 {
-  "name": "VETFACE | AGENDAMENTO",
+  "name": "VETFACE | Agendamento",
   "nodes": [
     {
       "parameters": {
@@ -22,11 +22,12 @@
         "operation": "getAll",
         "calendar": {
           "__rl": true,
-          "value": "alvesdeliima@gmail.com",
+          "value": "vetface@gmail.com",
           "mode": "list",
-          "cachedResultName": "alvesdeliima@gmail.com"
+          "cachedResultName": "vetface@gmail.com"
         },
         "returnAll": true,
+        "timeMin": "={{ $now.toISO() }}",
         "timeMax": "={{ $now.plus({ days: 15 }).endOf('day').toISO() }}",
         "options": {}
       },
@@ -38,16 +39,17 @@
       ],
       "id": "e4c4e46a-e901-48ae-a80c-c466e845aab8",
       "name": "Buscar Eventos Existentes",
+      "alwaysOutputData": true,
       "credentials": {
         "googleCalendarOAuth2Api": {
-          "id": "uT9iYyYLLY61WWvx",
-          "name": "Google Calendar account @alvesdeliima"
+          "id": "XO6m7LVEd6P9D2Wd",
+          "name": "Google Calendar account @vetface"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "// Grade diária de atendimento\nconst gradeHorarios = [\"09:00\", \"10:00\", \"11:00\", \"14:00\", \"15:00\", \"16:00\", \"17:00\"];\n\n// Eventos que vieram do Google Calendar\nconst eventos = $input.all().map(i => i.json);\n\n// Mapeia eventos ocupados: { \"YYYY-MM-DD\": [\"09:00\", \"14:00\"] }\nconst ocupados = {};\nfor (const ev of eventos) {\n  if (ev.start && ev.start.dateTime) {\n    const dataObj = new Date(ev.start.dateTime);\n    const dataStr = dataObj.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD\n    const horaStr = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });\n    \n    if (!ocupados[dataStr]) ocupados[dataStr] = [];\n    ocupados[dataStr].push(horaStr);\n  }\n}\n\n// Gera a matriz dos próximos 15 dias\nconst disponibilidade = {};\nconst agora = new Date();\n\nfor (let i = 0; i < 15; i++) {\n  const dia = new Date();\n  dia.setDate(agora.getDate() + i);\n  \n  // Ignora sábado (6) e domingo (0)\n  const diaSemana = dia.getDay();\n  if (diaSemana === 0 || diaSemana === 6) continue;\n\n  const diaStr = dia.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });\n  const ocupadosNoDia = ocupados[diaStr] || [];\n\n  // Filtra apenas o que está livre\n  const livres = gradeHorarios.filter(h => !ocupadosNoDia.includes(h));\n\n  // Só adiciona se houver pelo menos 1 horário livre\n  if (livres.length > 0) {\n    disponibilidade[diaStr] = livres;\n  }\n}\n\nreturn [{ json: { agenda: disponibilidade } }];;"
+        "jsCode": "// 1. Obtém os itens retornados pelo nó do Google Calendar\nconst items = $('Buscar Eventos Existentes').all();\n\n// 2. Trata retorno vazio (quando não há nenhum evento marcado na agenda)\nconst eventosOcupados = (items.length === 1 && (!items[0].json || Object.keys(items[0].json).length === 0 || !items[0].json.start))\n  ? []\n  : items.map(item => item.json);\n\n// 3. Regras de Atendimento da Clínica\nconst DIAS_A_FRENTE = 14;\n// Apenas horários das 14:00 às 17:00\nconst HORARIOS_DIA = ['14:00', '15:00', '16:00', '17:00'];\nconst agenda = {};\n\n// 4. Mapeia os horários já ocupados no Google Calendar\nconst horariosBloqueados = new Set();\n\neventosOcupados.forEach(evento => {\n  const startStr = evento.start?.dateTime || evento.start?.date;\n  if (startStr) {\n    const dataHora = new Date(startStr);\n    const dataFormatada = dataHora.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\n    const horaFormatada = dataHora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });\n    \n    horariosBloqueados.add(`${dataFormatada} ${horaFormatada}`);\n  }\n});\n\n// 5. Gera os dias de atendimento e preenche os horários livres\nconst hoje = new Date();\n\nfor (let i = 0; i <= DIAS_A_FRENTE; i++) {\n  const dataAlvo = new Date(hoje);\n  dataAlvo.setDate(hoje.getDate() + i);\n\n  // 0 = Domingo, 6 = Sábado\n  const diaSemana = dataAlvo.getDay();\n  if (diaSemana === 0 || diaSemana === 6) {\n    continue; // Bloqueia Sábados e Domingos\n  }\n\n  const ano = dataAlvo.getFullYear();\n  const mes = String(dataAlvo.getMonth() + 1).padStart(2, '0');\n  const dia = String(dataAlvo.getDate()).padStart(2, '0');\n  const chaveDia = `${ano}-${mes}-${dia}`;\n\n  // Filtra apenas os horários livres dentro da janela 14h - 17h\n  const slotsLivres = HORARIOS_DIA.filter(hora => {\n    // Se for o dia de hoje, não exibe horários do passado\n    if (i === 0) {\n      const [h, m] = hora.split(':').map(Number);\n      const agora = new Date();\n      const horaSlot = new Date(dataAlvo);\n      horaSlot.setHours(h, m, 0, 0);\n      if (horaSlot <= agora) return false;\n    }\n\n    return !horariosBloqueados.has(`${chaveDia} ${hora}`);\n  });\n\n  if (slotsLivres.length > 0) {\n    agenda[chaveDia] = slotsLivres;\n  }\n}\n\n// 6. Retorna a agenda filtrada\nreturn [{\n  json: {\n    agenda: agenda\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -125,9 +127,9 @@
       "parameters": {
         "calendar": {
           "__rl": true,
-          "value": "alvesdeliima@gmail.com",
+          "value": "vetface@gmail.com",
           "mode": "list",
-          "cachedResultName": "alvesdeliima@gmail.com"
+          "cachedResultName": "vetface@gmail.com"
         },
         "start": "={{ $json.body.start_time }}",
         "end": "={{ new Date(new Date($json.body.start_time).getTime() + 60 * 60 * 1000).toISOString() }}",
@@ -146,8 +148,8 @@
       "name": "Cria Evento",
       "credentials": {
         "googleCalendarOAuth2Api": {
-          "id": "uT9iYyYLLY61WWvx",
-          "name": "Google Calendar account @alvesdeliima"
+          "id": "XO6m7LVEd6P9D2Wd",
+          "name": "Google Calendar account @vetface"
         }
       }
     },
@@ -270,7 +272,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Obtém os dados do nó do Supabase (Busca no BD) e do Google Calendar (Get an event1)\nconst itemSupa = $('Busca no BD').first()?.json;\nconst itemGcal = $('Get an event1').first()?.json;\n\n// Se não encontrou no Supabase\nif (!itemSupa || !itemSupa.id) {\n  return [{ json: { encontrado: false } }];\n}\n\nreturn [{\n  json: {\n    encontrado: true,\n    evento: {\n      id: itemSupa.id,\n      google_event_id: itemSupa.google_event_id,\n      start_time: itemGcal?.start?.dateTime || itemSupa.start_time,\n      nomePet: itemSupa.nome_pet,\n      nomeTutor: itemSupa.nome_tutor,\n      tipoPet: itemSupa.tipo_pet\n    }\n  }\n}];"
+        "jsCode": "// Pega os itens que acabaram de chegar do nó anterior (Supabase)\nconst items = $input.all();\n\n// Se não encontrou nenhuma linha ou veio vazio\nif (!items || items.length === 0 || !items[0].json || !items[0].json.id) {\n  return [{ json: { encontrado: false } }];\n}\n\n// Pega o agendamento mais recente/válido retornado\nconst item = items[0].json;\n\nreturn [{\n  json: {\n    encontrado: true,\n    evento: {\n      id: item.id,\n      google_event_id: item.google_event_id,\n      start_time: item.start_time,\n      nomePet: item.nome_pet,\n      nomeTutor: item.nome_tutor,\n      tipoPet: item.tipo_pet\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -324,13 +326,13 @@
         "operation": "update",
         "calendar": {
           "__rl": true,
-          "value": "alvesdeliima@gmail.com",
+          "value": "vetface@gmail.com",
           "mode": "list",
-          "cachedResultName": "alvesdeliima@gmail.com"
+          "cachedResultName": "vetface@gmail.com"
         },
         "eventId": "={{ $('Webhook Reagendar Google').item.json.body.eventId }}",
         "updateFields": {
-          "end": "={{ new Date(new Date($('Webhook Reagendar Google').item.json.body.nova_start_time).getTime() + 60*60*1000).toISOString() }}",
+          "end": "={{ DateTime.fromISO($('Webhook Reagendar Google').item.json.body.nova_start_time).plus({ hours: 1 }).toISO() }}",
           "start": "={{ $('Webhook Reagendar Google').item.json.body.nova_start_time }}"
         }
       },
@@ -344,35 +346,8 @@
       "name": "Update an event",
       "credentials": {
         "googleCalendarOAuth2Api": {
-          "id": "uT9iYyYLLY61WWvx",
-          "name": "Google Calendar account @alvesdeliima"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "get",
-        "calendar": {
-          "__rl": true,
-          "value": "alvesdeliima@gmail.com",
-          "mode": "list",
-          "cachedResultName": "alvesdeliima@gmail.com"
-        },
-        "eventId": "={{ $('Webhook Reagendar Google').item.json.body.eventId }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.googleCalendar",
-      "typeVersion": 1.3,
-      "position": [
-        464,
-        608
-      ],
-      "id": "13289fab-8fe3-43d6-a636-6f9338c04743",
-      "name": "Get an event",
-      "credentials": {
-        "googleCalendarOAuth2Api": {
-          "id": "uT9iYyYLLY61WWvx",
-          "name": "Google Calendar account @alvesdeliima"
+          "id": "XO6m7LVEd6P9D2Wd",
+          "name": "Google Calendar account @vetface"
         }
       }
     },
@@ -419,33 +394,6 @@
         "supabaseApi": {
           "id": "CbzDfMqg0k5620oM",
           "name": "Supabase account @agendamentos_vet"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "get",
-        "calendar": {
-          "__rl": true,
-          "value": "alvesdeliima@gmail.com",
-          "mode": "list",
-          "cachedResultName": "alvesdeliima@gmail.com"
-        },
-        "eventId": "={{ $json.google_event_id }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.googleCalendar",
-      "typeVersion": 1.3,
-      "position": [
-        432,
-        400
-      ],
-      "id": "ac74dc67-358b-41bc-abc4-de6942fc7d9c",
-      "name": "Get an event1",
-      "credentials": {
-        "googleCalendarOAuth2Api": {
-          "id": "uT9iYyYLLY61WWvx",
-          "name": "Google Calendar account @alvesdeliima"
         }
       }
     }
@@ -567,6 +515,39 @@
           "executionMode": "production"
         }
       }
+    ],
+    "Webhook Buscar Disponibilidade": [
+      {
+        "json": {
+          "headers": {
+            "host": "webhook.gestoraautomatica.online",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "accept": "*/*",
+            "accept-encoding": "gzip, deflate, br, zstd",
+            "accept-language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+            "origin": "https://vetface.com.br",
+            "priority": "u=1, i",
+            "referer": "https://vetface.com.br/",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-forwarded-for": "168.195.182.236",
+            "x-forwarded-host": "webhook.gestoraautomatica.online",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "88bfb8800e29",
+            "x-real-ip": "168.195.182.236"
+          },
+          "params": {},
+          "query": {},
+          "body": {},
+          "webhookUrl": "https://webhook.gestoraautomatica.online/webhook/slots-disponiveis",
+          "executionMode": "production"
+        }
+      }
     ]
   },
   "connections": {
@@ -662,7 +643,7 @@
       "main": [
         [
           {
-            "node": "Get an event1",
+            "node": "Formata Dados",
             "type": "main",
             "index": 0
           }
@@ -691,33 +672,11 @@
         ]
       ]
     },
-    "Get an event": {
-      "main": [
-        [
-          {
-            "node": "Update an event",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Update a row": {
       "main": [
         [
           {
-            "node": "Get an event",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get an event1": {
-      "main": [
-        [
-          {
-            "node": "Formata Dados",
+            "node": "Update an event",
             "type": "main",
             "index": 0
           }
@@ -731,7 +690,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "d81bb88d-1ad4-46ee-81aa-f0ced60e8d15",
+  "versionId": "c7c57346-a287-4d50-8bbf-694ddb217735",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "696c8a0bcfd56907613290e11a890e96f950c69d5ddbbead6bc4c9c84144080f"
