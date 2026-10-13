@@ -227,6 +227,18 @@ async function carregarSlots() {
       agendaDisponivel = data;
     }
 
+    // A API retorna datas e horários locais de São Paulo. Filtra cada horário
+    // individualmente para garantir antecedência mínima de 48 horas.
+    const limiteAgendamento = Date.now() + 48 * 60 * 60 * 1000;
+    Object.keys(agendaDisponivel).forEach((diaISO) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(diaISO)) return;
+      agendaDisponivel[diaISO] = (agendaDisponivel[diaISO] || []).filter((hora) => {
+        const inicioSlot = new Date(`${diaISO}T${hora}:00-03:00`).getTime();
+        return Number.isFinite(inicioSlot) && inicioSlot >= limiteAgendamento;
+      });
+      if (agendaDisponivel[diaISO].length === 0) delete agendaDisponivel[diaISO];
+    });
+
     const dias = Object.keys(agendaDisponivel).filter((d) =>
       /^\d{4}-\d{2}-\d{2}$/.test(d),
     );
