@@ -21,6 +21,13 @@ Microsistema web responsivo e automatizado para agendamento, consulta e reagenda
   - Atualização do evento original no **Google Calendar** via API oficial (HTTP Request PATCH).
   - Atualização em tempo real do status e novo horário no **Supabase** (`status: reagendado`).
 
+- **📋 Regras de Agenda:**
+  - Atendimento de segunda a sexta, consultas de 1h às 14:00, 15:00 e 16:00 (horário de Brasília), até 14 dias à frente.
+  - Antecedência mínima de 48 horas.
+  - Antes de criar ou reagendar, o n8n valida o horário e confere de novo o Google Calendar. Se o horário já foi ocupado, responde `409` com o motivo.
+  - Eventos marcados como "Livre" no Google Calendar não bloqueiam horários. Eventos de dia inteiro marcados como "Ocupado" bloqueiam o dia.
+  - A consulta por WhatsApp mostra a próxima consulta com status diferente de `cancelled` (inclui `confirmed` e `reagendado`).
+
 - **🔒 Segurança & Boas Práticas:**
   - Configurações e endpoints sensíveis centralizados em `config.js` e protegidos via `.gitignore`.
   - Exemplo público fornecido através de `config.example.js`.
@@ -52,7 +59,7 @@ vetface-agendamento/
 ├── script.js                # Lógica de interface, máscaras e requisições assíncronas
 ├── logo-com-icone-...svg    # Ativos de identidade visual
 └── workflows/               # Backups dos fluxos do n8n exportados em JSON
-    └── vetface_automacoes.json
+    └── VETFACE _ AGENDAMENTO.json
 
 ⚙️ Configuração e Execução Local
 
@@ -69,10 +76,10 @@ cp config.example.js config.js
 Preencha as URLs dos seus Webhooks ativos no n8n:
 
 const CONFIG = {
-  N8N_URL_SLOTS: '[https://seu-n8n.online/webhook/agenda-livre](https://seu-n8n.online/webhook/agenda-livre)',
-  N8N_URL_AGENDAR: '[https://seu-n8n.online/webhook/agendamento-google](https://seu-n8n.online/webhook/agendamento-google)',
-  N8N_URL_CONSULTAR: '[https://seu-n8n.online/webhook/consultar-por-telefone](https://seu-n8n.online/webhook/consultar-por-telefone)',
-  N8N_URL_REAGENDAR: '[https://seu-n8n.online/webhook/reagendar-google](https://seu-n8n.online/webhook/reagendar-google)'
+  N8N_URL_SLOTS: 'https://seu-n8n.online/webhook/slots-disponiveis',
+  N8N_URL_AGENDAR: 'https://seu-n8n.online/webhook/agendamento-google',
+  N8N_URL_CONSULTAR: 'https://seu-n8n.online/webhook/consultar-por-telefone',
+  N8N_URL_REAGENDAR: 'https://seu-n8n.online/webhook/reagendar-google'
 };
 
 3. Rodar Localmente

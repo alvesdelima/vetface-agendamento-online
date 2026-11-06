@@ -86,7 +86,7 @@ function resetarParaInicio() {
   statusMessage.innerText = "";
   document.getElementById("headerTitle").innerText = "Agendamento de Consultas";
   document.getElementById("headerSubtitle").innerText =
-    "Cuide do sorriso e da saúde do seu pet com a Dra. Mariana Ramos";
+    "Cuide do sorriso e da saúde do seu pet.";
 }
 
 // 1. INICIAR NOVO AGENDAMENTO
@@ -233,6 +233,8 @@ async function carregarSlots() {
     Object.keys(agendaDisponivel).forEach((diaISO) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(diaISO)) return;
       agendaDisponivel[diaISO] = (agendaDisponivel[diaISO] || []).filter((hora) => {
+        const [horaNumero, minutoNumero] = hora.split(":").map(Number);
+        if (horaNumero > 16 || (horaNumero === 16 && minutoNumero > 0)) return false;
         const inicioSlot = new Date(`${diaISO}T${hora}:00-03:00`).getTime();
         return Number.isFinite(inicioSlot) && inicioSlot >= limiteAgendamento;
       });
@@ -344,7 +346,7 @@ bookingForm.addEventListener("submit", async (e) => {
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok) throw new Error();
+    if (!res.ok) throw new Error(await lerMensagemErro(res));
 
     statusMessage.className = "status-box success";
     statusMessage.innerText = "✅ Consulta agendada com sucesso!";
@@ -352,8 +354,9 @@ bookingForm.addEventListener("submit", async (e) => {
     bookingForm.reset();
   } catch (err) {
     statusMessage.className = "status-box error";
-    statusMessage.innerText =
-      "❌ Não foi possível agendar. Tente outro horário.";
+    statusMessage.innerText = `❌ ${
+      err.message || "Não foi possível agendar. Tente outro horário."
+    }`;
   } finally {
     btn.disabled = false;
     btn.innerHTML = "<span>Confirmar Agendamento</span>";
@@ -387,7 +390,7 @@ async function executarReagendamento() {
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+    if (!res.ok) throw new Error(await lerMensagemErro(res));
 
     statusMessage.className = "status-box success";
     statusMessage.innerText = "✅ Consulta reagendada com sucesso!";
@@ -395,10 +398,23 @@ async function executarReagendamento() {
     consultaEncontradaCard.classList.add("hidden");
   } catch (err) {
     statusMessage.className = "status-box error";
-    statusMessage.innerText = "❌ Falha ao reagendar. Tente novamente.";
+    statusMessage.innerText = `❌ ${
+      err.message || "Falha ao reagendar. Tente novamente."
+    }`;
   } finally {
     btn.disabled = false;
     btn.innerHTML = "<span>Salvar Novo Horário</span>";
+  }
+}
+
+// Lê a mensagem de erro enviada pelo n8n (ex.: 409 "horário já reservado")
+async function lerMensagemErro(res) {
+  try {
+    const data = await res.json();
+    const payload = Array.isArray(data) ? data[0] : data;
+    return payload?.message || "";
+  } catch {
+    return "";
   }
 }
 

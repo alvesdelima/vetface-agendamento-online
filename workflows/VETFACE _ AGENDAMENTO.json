@@ -22,14 +22,16 @@
         "operation": "getAll",
         "calendar": {
           "__rl": true,
-          "value": "vetface@gmail.com",
+          "value": "contato@vetface.com.br",
           "mode": "list",
-          "cachedResultName": "vetface@gmail.com"
+          "cachedResultName": "contato@vetface.com.br"
         },
         "returnAll": true,
         "timeMin": "={{ $now.toISO() }}",
         "timeMax": "={{ $now.plus({ days: 15 }).endOf('day').toISO() }}",
-        "options": {}
+        "options": {
+          "singleEvents": true
+        }
       },
       "type": "n8n-nodes-base.googleCalendar",
       "typeVersion": 1.3,
@@ -49,12 +51,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// 1. Obtém os itens retornados pelo nó do Google Calendar\nconst items = $('Buscar Eventos Existentes').all();\n\n// 2. Trata retorno vazio (quando não há nenhum evento marcado na agenda)\nconst eventosOcupados = (items.length === 1 && (!items[0].json || Object.keys(items[0].json).length === 0 || !items[0].json.start))\n  ? []\n  : items.map(item => item.json);\n\n// 3. Regras de Atendimento da Clínica\nconst DIAS_A_FRENTE = 14;\n// Apenas horários das 14:00 às 17:00\nconst HORARIOS_DIA = ['14:00', '15:00', '16:00', '17:00'];\nconst agenda = {};\n\n// 4. Mapeia os horários já ocupados no Google Calendar\nconst horariosBloqueados = new Set();\n\neventosOcupados.forEach(evento => {\n  const startStr = evento.start?.dateTime || evento.start?.date;\n  if (startStr) {\n    const dataHora = new Date(startStr);\n    const dataFormatada = dataHora.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\n    const horaFormatada = dataHora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });\n    \n    horariosBloqueados.add(`${dataFormatada} ${horaFormatada}`);\n  }\n});\n\n// 5. Gera os dias de atendimento e preenche os horários livres\nconst hoje = new Date();\n\nfor (let i = 0; i <= DIAS_A_FRENTE; i++) {\n  const dataAlvo = new Date(hoje);\n  dataAlvo.setDate(hoje.getDate() + i);\n\n  // 0 = Domingo, 6 = Sábado\n  const diaSemana = dataAlvo.getDay();\n  if (diaSemana === 0 || diaSemana === 6) {\n    continue; // Bloqueia Sábados e Domingos\n  }\n\n  const ano = dataAlvo.getFullYear();\n  const mes = String(dataAlvo.getMonth() + 1).padStart(2, '0');\n  const dia = String(dataAlvo.getDate()).padStart(2, '0');\n  const chaveDia = `${ano}-${mes}-${dia}`;\n\n  // Filtra apenas os horários livres dentro da janela 14h - 17h\n  const slotsLivres = HORARIOS_DIA.filter(hora => {\n    // Se for o dia de hoje, não exibe horários do passado\n    if (i === 0) {\n      const [h, m] = hora.split(':').map(Number);\n      const agora = new Date();\n      const horaSlot = new Date(dataAlvo);\n      horaSlot.setHours(h, m, 0, 0);\n      if (horaSlot <= agora) return false;\n    }\n\n    return !horariosBloqueados.has(`${chaveDia} ${hora}`);\n  });\n\n  if (slotsLivres.length > 0) {\n    agenda[chaveDia] = slotsLivres;\n  }\n}\n\n// 6. Retorna a agenda filtrada\nreturn [{\n  json: {\n    agenda: agenda\n  }\n}];"
+        "jsCode": "// 1. Obtém os eventos retornados pelo nó do Google Calendar\n//    (ignora o item vazio de quando não há eventos, cancelados e eventos marcados como \"Livre\")\nconst eventosOcupados = $('Buscar Eventos Existentes').all()\n  .map(item => item.json)\n  .filter(e => e && e.start && e.status !== 'cancelled' && e.transparency !== 'transparent');\n\n// 2. Regras de Atendimento da Clínica (sempre no fuso de São Paulo)\nconst TZ = 'America/Sao_Paulo';\nconst DIAS_A_FRENTE = 14;\n// Consultas de 1h começando às 14:00, 15:00 e 16:00 (atendimento das 14h às 17h)\nconst HORARIOS_DIA = ['14:00', '15:00', '16:00'];\nconst DURACAO_MINUTOS = 60;\n\n// 3. Converte os eventos em intervalos ocupados [início, fim) em milissegundos\n//    Eventos de dia inteiro bloqueiam o dia todo.\nconst intervalosOcupados = eventosOcupados.map(e => {\n  if (e.start.dateTime) {\n    const ini = DateTime.fromISO(e.start.dateTime);\n    const fim = e.end?.dateTime ? DateTime.fromISO(e.end.dateTime) : ini.plus({ minutes: DURACAO_MINUTOS });\n    return [ini.toMillis(), fim.toMillis()];\n  }\n  const ini = DateTime.fromISO(e.start.date, { zone: TZ }).startOf('day');\n  const fim = e.end?.date ? DateTime.fromISO(e.end.date, { zone: TZ }).startOf('day') : ini.plus({ days: 1 });\n  return [ini.toMillis(), fim.toMillis()];\n});\n\nconst conflita = (ini, fim) =>\n  intervalosOcupados.some(([a, b]) => a < fim.toMillis() && b > ini.toMillis());\n\n// 4. Gera os dias de atendimento (seg a sex) e preenche os horários livres\nconst agora = DateTime.now().setZone(TZ);\nconst agenda = {};\n\nfor (let i = 0; i <= DIAS_A_FRENTE; i++) {\n  const dia = agora.plus({ days: i }).startOf('day');\n\n  // Luxon: 1 = segunda ... 6 = sábado, 7 = domingo\n  if (dia.weekday >= 6) continue;\n\n  const chaveDia = dia.toFormat('yyyy-MM-dd');\n\n  const slotsLivres = HORARIOS_DIA.filter(hora => {\n    const [h, m] = hora.split(':').map(Number);\n    const inicio = dia.set({ hour: h, minute: m, second: 0, millisecond: 0 });\n    const fim = inicio.plus({ minutes: DURACAO_MINUTOS });\n    if (inicio <= agora) return false; // não exibe horários do passado\n    return !conflita(inicio, fim);\n  });\n\n  if (slotsLivres.length > 0) {\n    agenda[chaveDia] = slotsLivres;\n  }\n}\n\n// 5. Retorna a agenda filtrada\nreturn [{ json: { agenda } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        416,
+        432,
         0
       ],
       "id": "5bbed07d-753d-413a-be35-52bafd8bfc23",
@@ -62,7 +64,16 @@
     },
     {
       "parameters": {
-        "options": {}
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -117,7 +128,7 @@
       "typeVersion": 2.1,
       "position": [
         0,
-        608
+        768
       ],
       "id": "2a2a8862-c6cd-4615-b567-b67187d5b5a7",
       "name": "Webhook Reagendar Google",
@@ -127,9 +138,9 @@
       "parameters": {
         "calendar": {
           "__rl": true,
-          "value": "vetface@gmail.com",
+          "value": "contato@vetface.com.br",
           "mode": "list",
-          "cachedResultName": "vetface@gmail.com"
+          "cachedResultName": "contato@vetface.com.br"
         },
         "start": "={{ $json.body.start_time }}",
         "end": "={{ new Date(new Date($json.body.start_time).getTime() + 60 * 60 * 1000).toISOString() }}",
@@ -141,7 +152,7 @@
       "type": "n8n-nodes-base.googleCalendar",
       "typeVersion": 1.3,
       "position": [
-        416,
+        864,
         208
       ],
       "id": "cd170129-4f49-49e8-8c99-a10a28a3631f",
@@ -204,7 +215,7 @@
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        624,
+        1072,
         208
       ],
       "id": "f834ea9b-21e9-4591-9b43-63c74fa0e21b",
@@ -218,12 +229,21 @@
     },
     {
       "parameters": {
-        "options": {}
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        864,
+        1312,
         208
       ],
       "id": "7afcfc75-00ed-4a66-88bf-78102a24d460",
@@ -242,8 +262,8 @@
             },
             {
               "keyName": "status",
-              "condition": "eq",
-              "keyValue": "confirmad"
+              "condition": "neq",
+              "keyValue": "cancelled"
             },
             {
               "keyName": "start_time",
@@ -251,7 +271,8 @@
               "keyValue": "={{ $now.startOf('day').toISO() }}"
             }
           ]
-        }
+        },
+        "returnAll": true
       },
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
@@ -272,7 +293,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Pega os itens que acabaram de chegar do nó anterior (Supabase)\nconst items = $input.all();\n\n// Se não encontrou nenhuma linha ou veio vazio\nif (!items || items.length === 0 || !items[0].json || !items[0].json.id) {\n  return [{ json: { encontrado: false } }];\n}\n\n// Pega o agendamento mais recente/válido retornado\nconst item = items[0].json;\n\nreturn [{\n  json: {\n    encontrado: true,\n    evento: {\n      id: item.id,\n      google_event_id: item.google_event_id,\n      start_time: item.start_time,\n      nomePet: item.nome_pet,\n      nomeTutor: item.nome_tutor,\n      tipoPet: item.tipo_pet\n    }\n  }\n}];"
+        "jsCode": "// Pega os itens que acabaram de chegar do nó anterior (Supabase)\nconst items = $input.all()\n  .map(item => item.json)\n  .filter(row => row && row.id && row.start_time);\n\n// Se não encontrou nenhuma linha ou veio vazio\nif (items.length === 0) {\n  return [{ json: { encontrado: false } }];\n}\n\n// Ordena pela data e pega a próxima consulta (a mais próxima de hoje)\nitems.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));\nconst item = items[0];\n\nreturn [{\n  json: {\n    encontrado: true,\n    evento: {\n      id: item.id,\n      google_event_id: item.google_event_id,\n      start_time: item.start_time,\n      nomePet: item.nome_pet,\n      nomeTutor: item.nome_tutor,\n      tipoPet: item.tipo_pet\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -310,13 +331,22 @@
       "parameters": {
         "respondWith": "json",
         "responseBody": "{\"status\": \"success\", \"message\": \"Reagendado com sucesso!\"}",
-        "options": {}
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        880,
-        608
+        1312,
+        768
       ],
       "id": "700ff07b-48ae-42f7-baf1-f976b47a2ad8",
       "name": "Responde Reagendamento"
@@ -326,9 +356,9 @@
         "operation": "update",
         "calendar": {
           "__rl": true,
-          "value": "vetface@gmail.com",
+          "value": "contato@vetface.com.br",
           "mode": "list",
-          "cachedResultName": "vetface@gmail.com"
+          "cachedResultName": "contato@vetface.com.br"
         },
         "eventId": "={{ $('Webhook Reagendar Google').item.json.body.eventId }}",
         "updateFields": {
@@ -339,8 +369,8 @@
       "type": "n8n-nodes-base.googleCalendar",
       "typeVersion": 1.3,
       "position": [
-        672,
-        608
+        1072,
+        768
       ],
       "id": "8f71ea75-c92c-4cc1-af3f-6f727268971e",
       "name": "Update an event",
@@ -384,8 +414,8 @@
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        240,
-        608
+        864,
+        768
       ],
       "id": "c137224d-0dc0-4580-9661-df95f2a24ef4",
       "name": "Update a row",
@@ -394,6 +424,237 @@
         "supabaseApi": {
           "id": "CbzDfMqg0k5620oM",
           "name": "Supabase account @agendamentos_vet"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "contato@vetface.com.br",
+          "mode": "list",
+          "cachedResultName": "contato@vetface.com.br"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $json.body.start_time }}",
+        "timeMax": "={{ DateTime.fromISO($json.body.start_time).plus({ hours: 1 }).toISO() }}",
+        "options": {
+          "singleEvents": true
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        208,
+        208
+      ],
+      "id": "be31449a-41d4-4ac5-a1b2-217096924253",
+      "name": "Verifica Conflito (Agendar)",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "XO6m7LVEd6P9D2Wd",
+          "name": "Google Calendar account @vetface"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valida o horário pedido e confere se ele continua livre no Google Calendar\nconst TZ = 'America/Sao_Paulo';\nconst HORAS_VALIDAS = [14, 15, 16];\nconst ANTECEDENCIA_HORAS = 48;\n\nconst body = $('Webhook Criar Evento').first().json.body || {};\nconst inicio = DateTime.fromISO(String(body.start_time || '')).setZone(TZ);\n\nlet motivo = null;\n\nif (!inicio.isValid) {\n  motivo = 'Horário inválido.';\n} else if (inicio.weekday >= 6 || !HORAS_VALIDAS.includes(inicio.hour) || inicio.minute !== 0) {\n  motivo = 'Horário fora do expediente de atendimento.';\n} else if (inicio < DateTime.now().plus({ hours: ANTECEDENCIA_HORAS })) {\n  motivo = `Os agendamentos exigem ${ANTECEDENCIA_HORAS} horas de antecedência.`;\n} else {\n  const fim = inicio.plus({ hours: 1 });\n  const conflito = $input.all()\n    .map(item => item.json)\n    .filter(e => e && e.start && e.status !== 'cancelled' && e.transparency !== 'transparent')\n    .some(e => {\n      const ini = e.start.dateTime\n        ? DateTime.fromISO(e.start.dateTime)\n        : DateTime.fromISO(e.start.date, { zone: TZ }).startOf('day');\n      const fimEvento = e.end?.dateTime\n        ? DateTime.fromISO(e.end.dateTime)\n        : e.end?.date\n          ? DateTime.fromISO(e.end.date, { zone: TZ }).startOf('day')\n          : ini.plus({ hours: 1 });\n      return ini < fim && fimEvento > inicio;\n    });\n\n  if (conflito) motivo = 'Este horário acabou de ser reservado. Por favor, escolha outro.';\n}\n\n// pairedItem mantém o vínculo com o webhook para os nós seguintes usarem .item\nreturn [{ json: { livre: motivo === null, motivo, body }, pairedItem: { item: 0 } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        208
+      ],
+      "id": "c6d13bde-9fb5-447c-9938-77d976058af8",
+      "name": "Valida Horário (Agendar)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b8205eb2-75d6-44d4-88b7-65ba7b010e0a",
+              "leftValue": "={{ $json.livre }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        624,
+        208
+      ],
+      "id": "7c6f4e8c-7548-456c-a5a3-564fd6b697f2",
+      "name": "Horário Livre? (Agendar)"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"error\", message: $json.motivo }) }}",
+        "options": {
+          "responseCode": 409,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        864,
+        368
+      ],
+      "id": "c37819f3-4be8-4eee-a749-0424e02d0f61",
+      "name": "Responde Horário Indisponível (Agendar)"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "contato@vetface.com.br",
+          "mode": "list",
+          "cachedResultName": "contato@vetface.com.br"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $json.body.nova_start_time }}",
+        "timeMax": "={{ DateTime.fromISO($json.body.nova_start_time).plus({ hours: 1 }).toISO() }}",
+        "options": {
+          "singleEvents": true
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        208,
+        768
+      ],
+      "id": "e9942b18-1be1-4407-9371-27e173157d82",
+      "name": "Verifica Conflito (Reagendar)",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "XO6m7LVEd6P9D2Wd",
+          "name": "Google Calendar account @vetface"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valida o horário pedido e confere se ele continua livre no Google Calendar\nconst TZ = 'America/Sao_Paulo';\nconst HORAS_VALIDAS = [14, 15, 16];\nconst ANTECEDENCIA_HORAS = 48;\n\nconst body = $('Webhook Reagendar Google').first().json.body || {};\nconst inicio = DateTime.fromISO(String(body.nova_start_time || '')).setZone(TZ);\n\nlet motivo = null;\n\nif (!inicio.isValid) {\n  motivo = 'Horário inválido.';\n} else if (inicio.weekday >= 6 || !HORAS_VALIDAS.includes(inicio.hour) || inicio.minute !== 0) {\n  motivo = 'Horário fora do expediente de atendimento.';\n} else if (inicio < DateTime.now().plus({ hours: ANTECEDENCIA_HORAS })) {\n  motivo = `Os agendamentos exigem ${ANTECEDENCIA_HORAS} horas de antecedência.`;\n} else {\n  const fim = inicio.plus({ hours: 1 });\n  const conflito = $input.all()\n    .map(item => item.json)\n    .filter(e => e && e.start && e.status !== 'cancelled' && e.transparency !== 'transparent')\n    .filter(e => e.id !== body.eventId)\n    .some(e => {\n      const ini = e.start.dateTime\n        ? DateTime.fromISO(e.start.dateTime)\n        : DateTime.fromISO(e.start.date, { zone: TZ }).startOf('day');\n      const fimEvento = e.end?.dateTime\n        ? DateTime.fromISO(e.end.dateTime)\n        : e.end?.date\n          ? DateTime.fromISO(e.end.date, { zone: TZ }).startOf('day')\n          : ini.plus({ hours: 1 });\n      return ini < fim && fimEvento > inicio;\n    });\n\n  if (conflito) motivo = 'Este horário acabou de ser reservado. Por favor, escolha outro.';\n}\n\n// pairedItem mantém o vínculo com o webhook para os nós seguintes usarem .item\nreturn [{ json: { livre: motivo === null, motivo, body }, pairedItem: { item: 0 } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        768
+      ],
+      "id": "db5b17f6-7633-4dd0-80cd-c28957d339e6",
+      "name": "Valida Horário (Reagendar)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "99f8bcd8-3268-480a-b84f-d0917fde93df",
+              "leftValue": "={{ $json.livre }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        624,
+        768
+      ],
+      "id": "b2623a8c-0411-488b-8999-f116429609b9",
+      "name": "Horário Livre? (Reagendar)"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"error\", message: $json.motivo }) }}",
+        "options": {
+          "responseCode": 409,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        864,
+        928
+      ],
+      "id": "f5c90afc-026e-43ed-9db4-b9fba004c480",
+      "name": "Responde Horário Indisponível (Reagendar)"
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "instanceName": "Betyna",
+        "remoteJid": "5581988266602",
+        "messageText": "=🐾 *VETFACE | NOVO AGENDAMENTO REALIZADO*\n\nOlá, equipe Vetface! Tudo bem?\n\nUm novo agendamento foi realizado pelo sistema automático. Seguem os dados para conferência:\n\n👤 *Tutor(a):* {{ $json.nome_tutor }}\n🐶 *Pet:* {{ $json.nome_pet }}\n📅 *Data:* {{ DateTime.fromISO($json.start_time).setZone('America/Sao_Paulo').toFormat('dd/MM/yyyy') }}\n⏰ *Horário:* {{ DateTime.fromISO($json.start_time).setZone('America/Sao_Paulo').toFormat('HH:mm') }}\n📱 *Telefone para contato:* {{ $json.telefone }}\n\n✅ *Status:* Agendamento realizado com sucesso.\n\nPor favor, confiram as informações no sistema e realizem o acompanhamento necessário.\n\n_Esta é uma mensagem automática de notificação de novo agendamento, não precisa ser respondida._",
+        "options_message": {}
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        384
+      ],
+      "id": "ae0769dc-56c1-47c7-acc8-c4320af8d355",
+      "name": "Enviar texto",
+      "credentials": {
+        "evolutionApi": {
+          "id": "6ILf7dxLVR7EtoUx",
+          "name": "Evolution account"
         }
       }
     }
@@ -588,7 +849,7 @@
       "main": [
         [
           {
-            "node": "Cria Evento",
+            "node": "Verifica Conflito (Agendar)",
             "type": "main",
             "index": 0
           }
@@ -610,7 +871,7 @@
       "main": [
         [
           {
-            "node": "Update a row",
+            "node": "Verifica Conflito (Reagendar)",
             "type": "main",
             "index": 0
           }
@@ -633,6 +894,11 @@
         [
           {
             "node": "Responde Evento Criado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Enviar texto",
             "type": "main",
             "index": 0
           }
@@ -677,6 +943,86 @@
         [
           {
             "node": "Update an event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifica Conflito (Agendar)": {
+      "main": [
+        [
+          {
+            "node": "Valida Horário (Agendar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valida Horário (Agendar)": {
+      "main": [
+        [
+          {
+            "node": "Horário Livre? (Agendar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Horário Livre? (Agendar)": {
+      "main": [
+        [
+          {
+            "node": "Cria Evento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responde Horário Indisponível (Agendar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifica Conflito (Reagendar)": {
+      "main": [
+        [
+          {
+            "node": "Valida Horário (Reagendar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valida Horário (Reagendar)": {
+      "main": [
+        [
+          {
+            "node": "Horário Livre? (Reagendar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Horário Livre? (Reagendar)": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responde Horário Indisponível (Reagendar)",
             "type": "main",
             "index": 0
           }
