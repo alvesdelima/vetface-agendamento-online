@@ -4,6 +4,19 @@ const N8N_URL_AGENDAR = CONFIG.N8N_URL_AGENDAR;
 const N8N_URL_CONSULTAR = CONFIG.N8N_URL_CONSULTAR;
 const N8N_URL_REAGENDAR = CONFIG.N8N_URL_REAGENDAR;
 
+// Ficha do Paciente (Google Forms) — campos pré-preenchidos após o agendamento
+const FICHA_FORM_URL =
+  "https://docs.google.com/forms/d/e/1FAIpQLSdemNKxmnc3x6XyXYHkjt3X0coXk3DZHGRaRmWWd8BFSiaZTw/viewform";
+const FICHA_CAMPOS = {
+  nomeTutor: "entry.1824729367",
+  telefone: "entry.2113648798",
+  whatsapp: "entry.202209396",
+  nomePet: "entry.11986087",
+  especie: "entry.1978338720",
+};
+// Espécie do agendamento -> opção do formulário
+const FICHA_ESPECIES = { Cão: "Cão", Gato: "Gato", Outro: "Exótico" };
+
 // Estados Globais
 let modoOperacao = "novo"; // 'novo' | 'consultar' | 'reagendar'
 let eventoParaReagendar = null;
@@ -29,6 +42,8 @@ const slotsContainer = document.getElementById("slotsContainer");
 const bookingForm = document.getElementById("bookingForm");
 const reagendarActionBox = document.getElementById("reagendarActionBox");
 const statusMessage = document.getElementById("statusMessage");
+const fichaCta = document.getElementById("fichaCta");
+const linkFicha = document.getElementById("linkFicha");
 
 // Eventos de Navegação
 document
@@ -84,6 +99,7 @@ function resetarParaInicio() {
   consultaEncontradaCard.classList.add("hidden");
   statusMessage.className = "status-box hidden";
   statusMessage.innerText = "";
+  fichaCta.classList.add("hidden");
   document.getElementById("headerTitle").innerText = "Agendamento de Consultas";
   document.getElementById("headerSubtitle").innerText =
     "Cuide do sorriso e da saúde do seu pet.";
@@ -214,6 +230,7 @@ async function carregarSlots() {
   horariosWrapper.classList.add("hidden");
   bookingForm.classList.add("hidden");
   reagendarActionBox.classList.add("hidden");
+  fichaCta.classList.add("hidden");
 
   try {
     const res = await fetch(N8N_URL_SLOTS);
@@ -352,6 +369,10 @@ bookingForm.addEventListener("submit", async (e) => {
     statusMessage.innerText = "✅ Consulta agendada com sucesso!";
     slotsWrapper.classList.add("hidden");
     bookingForm.reset();
+
+    linkFicha.href = montarLinkFicha(payload);
+    fichaCta.classList.remove("hidden");
+    fichaCta.scrollIntoView({ behavior: "smooth", block: "center" });
   } catch (err) {
     statusMessage.className = "status-box error";
     statusMessage.innerText = `❌ ${
@@ -405,6 +426,19 @@ async function executarReagendamento() {
     btn.disabled = false;
     btn.innerHTML = "<span>Salvar Novo Horário</span>";
   }
+}
+
+// Monta o link do Google Forms já preenchido com os dados do agendamento
+function montarLinkFicha(dados) {
+  const params = new URLSearchParams({ usp: "pp_url" });
+  params.set(FICHA_CAMPOS.nomeTutor, dados.nome);
+  params.set(FICHA_CAMPOS.telefone, dados.telefone.replace(/\D/g, ""));
+  params.set(FICHA_CAMPOS.whatsapp, "SIM");
+  params.set(FICHA_CAMPOS.nomePet, dados.nomePet);
+  if (FICHA_ESPECIES[dados.tipoPet]) {
+    params.set(FICHA_CAMPOS.especie, FICHA_ESPECIES[dados.tipoPet]);
+  }
+  return `${FICHA_FORM_URL}?${params.toString()}`;
 }
 
 // Lê a mensagem de erro enviada pelo n8n (ex.: 409 "horário já reservado")
